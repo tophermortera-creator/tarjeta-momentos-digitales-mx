@@ -1,0 +1,10 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/tarjeta-momentos-digitales-mx.html" },
+    { "source": "/index.html", "destination": "/tarjeta-momentos-digitales-mx.html" }
+  ]
+}
+
+
+
+
