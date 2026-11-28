@@ -490,8 +490,11 @@
     </script>
 
     <!-- Contador de visitas (invisible): registra cada entrada a esta tarjeta
-         en Firestore para la página en vivo del contador. No cambia nada de
-         lo que se ve y, si falla, la tarjeta sigue funcionando igual. -->
+         en Firestore para la página en vivo del contador, junto con la
+         ubicación aproximada del visitante según su conexión (ciudad, estado
+         y país; es la ciudad del proveedor de internet, no la del teléfono).
+         No cambia nada de lo que se ve y, si algo falla, la tarjeta sigue
+         funcionando igual. -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script>
@@ -510,12 +513,55 @@
           var now = new Date();
           var pad = function (n) { return (n < 10 ? "0" : "") + n; };
           var dia = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
-          var registro = firebase.firestore().collection("visitas").add({
-            tarjeta: "momentos",
-            ts: now.toISOString(),
-            dia: dia
-          });
-          if (registro && registro.catch) registro.catch(function () {});
+          var db = firebase.firestore();
+
+          function guardar(ubic) {
+            try {
+              var datos = {
+                tarjeta: "momentos",
+                ts: now.toISOString(),
+                dia: dia
+              };
+              if (ubic) {
+                if (ubic.ciudad) datos.ciudad = ubic.ciudad;
+                if (ubic.estado) datos.estado = ubic.estado;
+                if (ubic.pais) datos.pais = ubic.pais;
+              }
+              var registro = db.collection("visitas").add(datos);
+              if (registro && registro.catch) registro.catch(function () {});
+            } catch (e) { /* el contador nunca debe afectar la tarjeta */ }
+          }
+
+          /* Ubicación aproximada por la conexión (IP). Si el servicio no
+             responde en 3 segundos o falla, la visita se guarda sin
+             ubicación: el conteo nunca se pierde por esto. */
+          var guardado = false;
+          function guardarUnaVez(ubic) {
+            if (guardado) return;
+            guardado = true;
+            guardar(ubic);
+          }
+          var temporizador = setTimeout(function () { guardarUnaVez(null); }, 3000);
+          if (typeof fetch === "function") {
+            fetch("https://ipapi.co/json/")
+              .then(function (r) { return r && r.ok ? r.json() : null; })
+              .then(function (d) {
+                clearTimeout(temporizador);
+                if (!d || d.error) { guardarUnaVez(null); return; }
+                guardarUnaVez({
+                  ciudad: d.city || "",
+                  estado: d.region || "",
+                  pais: d.country_name || ""
+                });
+              })
+              .catch(function () {
+                clearTimeout(temporizador);
+                guardarUnaVez(null);
+              });
+          } else {
+            clearTimeout(temporizador);
+            guardarUnaVez(null);
+          }
         } catch (e) { /* el contador nunca debe afectar la tarjeta */ }
       })();
     </script>
